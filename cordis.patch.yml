@@ -1,0 +1,5 @@
+- id: ui-sidebar
+  disabled: true
+- insert:
+    - id: codex-style-ui
+      name: dsh-codex-ui

@@ -12,6 +12,10 @@ const paths = {
   folder: 'M3 7h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2ZM3 9V5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v2',
   more: 'M4 12h.01M12 12h.01M20 12h.01',
   check: 'm5 12 4 4L19 5',
+  settings: 'M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',
+  refresh: 'M20 7V3l-4 4M20 7a8 8 0 1 0 0 10M20 7h-5',
+  help: 'M9 8a3 3 0 0 1 6 0c0 2-3 2-3 5M12 17h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+  external: 'M14 3h7v7M21 3l-11 11M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5',
   chat: 'M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM7 9h10M7 13h7',
   trace: 'M9 5h12M9 12h12M9 19h12M3 3h3v4H3ZM3 10h3v4H3ZM3 17h3v4H3Z',
   target: 'M20 10a9 9 0 1 1-6-6M17 11a5 5 0 1 1-4-4M12 12l7-7M17 3v4h4',
@@ -173,6 +177,28 @@ export function apply(ctx) {
     const section = scheduled ? 'clock' : panel === 'cg-dshrinth' ? 'files' : panel === 'plugins' ? 'at' : panel === null ? localSection : '';
     const rail = (icon, label, onClick) => h('button', { type: 'button', className: 'cg-button cg-rail-item' + (section === icon ? ' cg-rail-selected' : ''), 'aria-label': label, 'aria-current': section === icon ? 'page' : undefined, onClick }, h(Icon, { name: icon, active: section === icon }), h('span', { className: 'cg-rail-tooltip', role: 'tooltip' }, label));
     const [menu, setMenu] = React.useState(false);
+    const [settingsMenu, setSettingsMenu] = React.useState(false);
+    const [balance, setBalance] = React.useState(null);
+    const [balanceLoading, setBalanceLoading] = React.useState(false);
+    const balancePending = React.useRef(false);
+    const settingsAnchor = React.useRef(null);
+    const refreshBalance = async () => {
+      if (balancePending.current) return;
+      balancePending.current = true;
+      setBalanceLoading(true);
+      try { setBalance(await ctx.connection.rpc.call('/api', 'dsh-codex-ui/balance', {})); }
+      catch { setBalance({ ok: false, error: { message: '连接失败，请稍后重试' } }); }
+      finally { balancePending.current = false; setBalanceLoading(false); }
+    };
+    React.useEffect(() => {
+      if (!settingsMenu) return;
+      refreshBalance();
+      const dismiss = event => { if (!settingsAnchor.current?.contains(event.target)) setSettingsMenu(false); };
+      const escape = event => { if (event.key === 'Escape') { setSettingsMenu(false); settingsAnchor.current?.querySelector('.cg-settings-trigger')?.focus(); } };
+      document.addEventListener('pointerdown', dismiss);
+      document.addEventListener('keydown', escape);
+      return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', escape); };
+    }, [settingsMenu]);
     const [brandMenu, setBrandMenu] = React.useState(false);
     const [notice, setNotice] = React.useState(false);
     const [projectsOpen, setProjectsOpen] = React.useState(false);
@@ -203,7 +229,7 @@ export function apply(ctx) {
     const searchSessions = () => { setRecentOpen(true); requestAnimationFrame(search); };
     const status = useSessionStatus(s => s);
     const waiting = Array.from(status.values()).filter(s => s.pendingInteraction || s.completionUnread).length;
-    const settings = () => document.querySelector('.cg-settings button')?.click();
+    const settings = () => { setSettingsMenu(false); document.querySelector('.cg-native-settings button')?.click(); };
     const renderTask = id => {
       const title = sessions[id].title || '新会话';
       return h('div', { key: id, className: 'cg-task-row' + ((currentSession?.id ?? selectedTask) === id ? ' cg-task-current' : ''), onMouseEnter: event => { const rect = event.currentTarget.getBoundingClientRect(); setTaskHover({ title, right: rect.right, top: rect.top }); }, onMouseLeave: () => setTaskHover(null) },
@@ -220,7 +246,18 @@ export function apply(ctx) {
         rail('at', '插件', () => go('plugins')),
         h(Button, { icon: 'more', label: '更多', onClick: () => setMenu(!menu) }),
         h('div', { className: 'cg-rail-bottom' },
-          h('div', { className: 'cg-settings', title: '设置' }, renderSlot('sidebar.settings', { wide: false }))),
+          h('div', { className: 'cg-settings', ref: settingsAnchor },
+            h(Button, { icon: 'settings', label: '设置菜单', className: 'cg-settings-trigger', 'aria-haspopup': 'menu', 'aria-expanded': settingsMenu, onClick: () => setSettingsMenu(!settingsMenu) }),
+            h('div', { className: 'cg-native-settings', hidden: true }, renderSlot('sidebar.settings', { wide: false })),
+            settingsMenu && h('div', { className: 'cg-account-menu', role: 'menu', 'aria-label': '设置菜单' },
+              h('div', { className: 'cg-account-summary', role: 'status', 'aria-live': 'polite' }, h('span', { className: 'cg-account-avatar', 'aria-hidden': true }, 'D'), h('div', null, h('div', { className: 'cg-account-title' }, 'DeepSeek API'), h('div', { className: 'cg-account-balance' }, balanceLoading ? '正在读取余额…' : balance?.ok ? balance.value.balances.map(row => `${row.currency === 'CNY' ? '¥' : '$'}${row.total}`).join(' / ') : balance?.error.message || '余额待查询'), h('div', { className: 'cg-account-caption' }, balance?.ok ? balance.value.available ? '可用余额' : '余额不足' : 'API 余额'))),
+              h('div', { className: 'cg-account-separator' }),
+              h(Button, { icon: 'refresh', label: '刷新余额', role: 'menuitem', disabled: balanceLoading, onClick: refreshBalance, children: ['刷新余额', h('span', { key: 'hint', className: 'cg-account-hint' }, balanceLoading ? '读取中' : '')] }),
+              h(Button, { icon: 'external', label: 'API 控制台', role: 'menuitem', onClick: () => { setSettingsMenu(false); window.open('https://platform.deepseek.com/usage', '_blank', 'noopener,noreferrer'); }, children: 'API 控制台' }),
+              h(Button, { icon: 'settings', label: '设置', role: 'menuitem', onClick: settings, children: '设置' }),
+              h('div', { className: 'cg-account-separator' }),
+              h(Button, { icon: 'at', label: '插件', role: 'menuitem', onClick: () => { setSettingsMenu(false); go('plugins'); }, children: '插件' }),
+              h(Button, { icon: 'help', label: '帮助', role: 'menuitem', onClick: () => { setSettingsMenu(false); window.open('https://github.com/Loliyer520/dsh-codex-ui#readme', '_blank', 'noopener,noreferrer'); }, children: ['帮助', h('span', { key: 'arrow', className: 'cg-account-hint' }, h(Icon, { name: 'chevron', size: 12 }))] })))),
         menu && h('div', { className: 'cg-menu', role: 'menu' }, h(Button, { icon: 'at', label: '插件', onClick: () => { setMenu(false); go('plugins'); }, children: '插件' }), h(Button, { label: '展开或收起侧栏', onClick: () => { setMenu(false); ctx.layout.toggleSidebar(); }, children: '展开或收起侧栏' }), h(Button, { label: '设置', onClick: settings, children: '设置' }))),
       scheduled ? h('div', { className: 'cg-navigation cg-schedule-nav' }, h('div', { className: 'cg-brand-row' }, h('strong', null, '定时任务'), h(Button, { icon: 'search', label: '搜索任务', onClick: () => document.querySelector('.cg-task-search')?.focus() })), h(Button, { icon: 'plus', label: '新建任务', onClick: () => window.dispatchEvent(new CustomEvent('cg-new-task')), children: '新建任务' }), h('div', { className: 'cg-task-upcoming' }, '即将执行'), h('p', { className: 'cg-task-empty' }, '暂无已安排的任务'), h('p', { className: 'cg-task-empty' }, '草稿可在右侧查看')) : h('div', { className: 'cg-navigation' },
         h('div', { className: 'cg-brand-row' },

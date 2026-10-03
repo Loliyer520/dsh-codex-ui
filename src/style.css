@@ -122,6 +122,21 @@ html[data-chatgpt-ui] ._7KE1Ra_triggerIcon { display: none; }
 .cg-settings button { position: absolute !important; inset: 0; display: flex !important; align-items: center; justify-content: center; border: 0; padding: 9px !important; width: 36px !important; height: 36px !important; border-radius: 7px; color: inherit; background: transparent; }
 .cg-settings button:hover { background: var(--cg-hover); }
 .cg-settings button svg { width: 18px; height: 18px; }
+.cg-native-settings[hidden] { display: none !important; }
+.cg-account-menu { position: fixed; z-index: 1000; left: 8px; bottom: 54px; width: min(228px, calc(100vw - 16px)); box-sizing: border-box; padding: 6px; border: 1px solid #e5e5e5; border-radius: 20px; background: var(--cg-page); color: var(--cg-text); box-shadow: 0 6px 20px #00000012; animation: cg-model-enter 120ms ease-out; }
+.cg-account-summary { display: flex; align-items: center; gap: 8px; padding: 6px 5px 4px; min-height: 46px; }
+.cg-account-avatar { display: grid; place-items: center; flex: none; width: 20px; height: 20px; border-radius: 50%; background: #4d6bfe; color: white; font-size: 11px; }
+.cg-account-title { font-size: 13px; line-height: 18px; }
+.cg-account-balance { font-size: 15px; font-weight: 500; line-height: 21px; overflow-wrap: anywhere; }
+.cg-account-caption { color: #999; font-size: 11px; line-height: 16px; }
+.cg-account-separator { height: 1px; background: color-mix(in srgb, var(--cg-text) 9%, transparent); margin: 5px 6px; }
+.cg-settings .cg-account-menu > .cg-button { position: static !important; inset: auto; justify-content: flex-start; width: 100% !important; height: 29px !important; padding: 4px 6px !important; border-radius: 9px; color: var(--cg-text); font-size: 13px; line-height: 20px; gap: 7px; }
+.cg-settings .cg-account-menu > .cg-button:hover { background: var(--cg-hover); }
+.cg-settings .cg-account-menu > .cg-button:disabled { opacity: .5; cursor: default; }
+.cg-settings .cg-account-menu > .cg-button svg { width: 15px; height: 15px; flex: none; }
+.cg-account-hint { margin-left: auto; color: #999; font-size: 12px; }
+html[data-chatgpt-ui]:has([data-ds-dark-theme]) .cg-account-menu { border-color: #383838; }
+@media (prefers-reduced-motion: reduce) { .cg-account-menu { animation: none; } }
 
 html[data-chatgpt-ui]:not([data-cg-setting-goal]) [data-slot="conversation.hero.agentPreset"] > * { display: none; }
 

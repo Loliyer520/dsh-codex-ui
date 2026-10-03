@@ -3,11 +3,11 @@
 @font-face { font-family: "OpenAI Sans"; src: url("__OPENAI_SANS_REGULAR__") format("woff2"); font-style: normal; font-weight: 400; font-display: swap; }
 @font-face { font-family: "OpenAI Sans"; src: url("__OPENAI_SANS_MEDIUM__") format("woff2"); font-style: normal; font-weight: 500; font-display: swap; }
 @font-face { font-family: "OpenAI Sans"; src: url("__OPENAI_SANS_SEMIBOLD__") format("woff2"); font-style: normal; font-weight: 600; font-display: swap; }
-html[data-chatgpt-ui] { --cg-rail: 60px; --cg-sidebar: 288px; --cg-page: #fff; --cg-nav: #fbfbfb; --cg-chrome: #f3f3f3; --cg-text: #202123; --cg-muted: #999; --font-sans-default: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; --font-openai-sans: "OpenAI Sans", var(--font-sans-default); --dsw-font-family: var(--font-sans-default); font-family: var(--font-sans-default); }
+html[data-chatgpt-ui] { --cg-rail: 48px; --cg-sidebar: 288px; --cg-page: #fff; --cg-nav: #fbfbfb; --cg-chrome: #f3f3f3; --cg-text: #202123; --cg-muted: #999; --font-sans-default: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; --font-openai-sans: "OpenAI Sans", var(--font-sans-default); --dsw-font-family: var(--font-sans-default); font-family: var(--font-sans-default); }
 html[data-chatgpt-ui]:has([data-ds-dark-theme]) { --cg-page: #212121; --cg-nav: #171717; --cg-chrome: #171717; --cg-text: #ececec; --cg-muted: #929292; --cg-hover: #303030; }
 html[data-chatgpt-ui] body { background: var(--cg-chrome); color: var(--cg-text); font-family: var(--font-sans-default); -webkit-font-smoothing: antialiased; }
-html[data-chatgpt-ui] #root { box-sizing: border-box; padding: 4px 12px 12px 60px; height: 100dvh; }
-html[data-chatgpt-ui] .pI_x6G_frame { box-sizing: border-box; border: 1px solid #e8e8e8; border-radius: 13px 13px 4px 13px; background: var(--cg-page); }
+html[data-chatgpt-ui] #root { box-sizing: border-box; padding: 4px 4px 4px 48px !important; height: 100dvh; }
+html[data-chatgpt-ui] .pI_x6G_frame { box-sizing: border-box; border: 0; box-shadow: 0 1px 5px #0000000d, 0 0 1px #00000014; border-radius: 13px 13px 4px 13px; background: var(--cg-page); }
 html[data-chatgpt-ui] .pI_x6G_frame:not([data-sidebar-collapsed])[data-rightbar-collapsed] { grid-template-columns: 288px minmax(0, 1fr) 0 !important; }
 html[data-chatgpt-ui] .pI_x6G_sidebarCol { background: var(--cg-nav); border-right: 1px solid #e2e2e2; }
 /* The fixed icon rail already supplies collapsed navigation. Reclaim the
@@ -21,7 +21,7 @@ html[data-chatgpt-ui] button:focus-visible { outline: 2px solid #3982fa; outline
 .cg-button { display: inline-flex; align-items: center; gap: 9px; background: none; border: 0; color: inherit; cursor: pointer; padding: 6px; border-radius: 7px; font-size: 14px; line-height: 20px; }
 .cg-button:hover { background: var(--cg-hover); }
 .cg-sidebar { height: 100%; color: var(--cg-text); font-size: 14px; }
-.cg-rail { position: fixed; z-index: 24; left: 0; top: 0; bottom: 0; width: 60px; box-sizing: border-box; padding: 12px 12px 12px 20px; display: flex; align-items: center; flex-direction: column; gap: 8px; color: #888; }
+.cg-rail { position: fixed; z-index: 24; left: 0; top: 0; bottom: 0; width: var(--cg-rail); box-sizing: border-box; padding: 12px 6px; display: flex; align-items: center; flex-direction: column; gap: 8px; color: #888; }
 .cg-rail > .cg-button { flex: none; width: 36px; height: 36px; padding: 9px; }
 .cg-rail .cg-home { background: #e6e7e8; color: #202123; }
 .cg-rail-bottom { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 20px; padding-bottom: 10px; }

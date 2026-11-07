@@ -1,6 +1,6 @@
-﻿{
+{
     "name":  "dsh-codex-ui",
-    "version":  "0.3.47",
+    "version":  "0.3.48",
     "description":  "Codex-style interface and prompt modes for DeepSeek Harness",
     "type":  "module",
     "main":  "./lib/index.js",
@@ -27,7 +27,7 @@
               ],
     "scripts":  {
                     "build":  "node scripts/build.mjs",
-                    "check":  "node --check src/client.js \u0026\u0026 node --check src/model-ui.js \u0026\u0026 node --check src/prompt-modes.js \u0026\u0026 node --check lib/client.js",
+                    "check":  "node --check src/client.js \u0026\u0026 node --check src/model-ui.js \u0026\u0026 node --check src/prompt-modes.js \u0026\u0026 node --check src/session-purge.js && node --check lib/client.js",
                     "test":  "node --test tests/*.test.mjs"
                 },
     "dsh":  {

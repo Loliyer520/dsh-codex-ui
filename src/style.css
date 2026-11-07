@@ -276,6 +276,10 @@ html[data-chatgpt-ui] .pI_x6G_frame:has(.cg-dshrinth-page) .pI_x6G_sidebarCol { 
 .cg-rename-input { box-sizing: border-box; position: absolute; inset: 0; width: 100%; height: 31px; padding: 4px 8px; font: inherit; font-size: 13px; color: var(--cg-text); background: var(--cg-page); border: 1.5px solid #3982fa; border-radius: 10px; outline: none; z-index: 4; }
 .cg-navigation .cg-browse:has(.cg-task-menu) { overflow: visible; }
 
+/* Archived rows: muted, with restore/delete available in the same menu. */
+.cg-task-row.cg-task-archived .cg-pinned-row { color: var(--cg-muted); font-style: italic; opacity: .85; }
+.cg-task-row.cg-task-archived:hover .cg-pinned-row { opacity: 1; }
+
 /* Align disclosure and new-chat hit areas with the task rows. */
 .cg-navigation > .cg-new, .cg-browse > .cg-section-toggle { box-sizing: border-box; width: calc(100% + 12px); margin-left: -6px; margin-right: -6px; padding-left: 8px; padding-right: 8px; border-radius: 10px; justify-content: flex-start; }
 .cg-browse > .cg-section-toggle { min-height: 30px; }

@@ -22,7 +22,10 @@ const paths = {
   plus: 'M12 5v14M5 12h14',
   at: 'M16 8v7a2 2 0 0 0 4 0v-3a8 8 0 1 0-3 6M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',
   pin: 'M12 2a5 5 0 0 1 5 5c0 4-5 11-5 11S7 11 7 7a5 5 0 0 1 5-5Zm0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z',
-  fork: 'M7 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM7 7v4a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V7M12 13v6m-2 0h4'
+  fork: 'M7 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM7 7v4a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V7M12 13v6m-2 0h4',
+  archive: 'M4 4h16v4H4Zm0 5h16v11H4Zm5 3h6',
+  unarchive: 'M4 4h16v4H4Zm0 5h16v11H4Zm5 3h6M12 14v4m-2-2h4',
+  trash: 'M5 7h14M10 11v6M14 11v6M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3'
 };
 function Icon({ name, size = 16, active = false }) {
   const attrs = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: name === 'more' ? 3.6 : 1.7, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true, 'data-icon': name };
@@ -225,11 +228,20 @@ export function apply(ctx) {
       return () => { popup.remove(); document.removeEventListener('scroll', dismiss, true); window.removeEventListener('resize', dismiss); };
     }, [taskHover]);
     const [recentOpen, setRecentOpen] = React.useState(false);
+    const [archivedOpen, setArchivedOpen] = React.useState(false);
     const [navigationError, setNavigationError] = React.useState('');
     const [renameTarget, setRenameTarget] = React.useState(null);
+    const [purgedIds, setPurgedIds] = React.useState(() => { try { return new Set(JSON.parse(localStorage.getItem('cg-purged-sessions') || '[]')); } catch { return new Set(); } });
     const workspaces = useWorkspaces(s => s);
-    const [pins, setPins] = React.useState(() => { try { return JSON.parse(localStorage.getItem('cg-pinned-sessions') || '[]'); } catch { return []; } });
-    const savePins = next => { try { localStorage.setItem('cg-pinned-sessions', JSON.stringify(next)); } catch {} setPins(next); };
+    const pins = workspaces.pinnedSessionIds || [];
+    const archivedIds = workspaces.archivedSessionIds || [];
+    // Load persisted purged ids from server on mount so they survive restart.
+    React.useEffect(() => {
+      ctx.connection.rpc.call('/api', 'dsh-codex-ui/purged-ids', {}).then(r => {
+        if (Array.isArray(r)) { const s = new Set(r); setPurgedIds(s); try { localStorage.setItem('cg-purged-sessions', JSON.stringify([...s])); } catch {} }
+      }).catch(() => {});
+    }, []);
+    const addPurged = id => setPurgedIds(prev => { const next = new Set(prev); next.add(id); try { localStorage.setItem('cg-purged-sessions', JSON.stringify([...next])); } catch {} return next; });
     const searchSessions = () => { setRecentOpen(true); requestAnimationFrame(search); };
     const status = useSessionStatus(s => s);
     const waiting = Array.from(status.values()).filter(s => s.pendingInteraction || s.completionUnread).length;
@@ -238,13 +250,43 @@ export function apply(ctx) {
       if (!renameTarget) return;
       const { id, value } = renameTarget;
       const val = value.trim();
-      const currentTitle = sessions[id]?.title || '新会话';
-      if (!val || val === currentTitle) { setRenameTarget(null); return; }
-      try {
-        const result = await ctx.sessions.binding(id)?.session?.rename(val);
-        if (result && !result.ok) throw new Error(result.error?.message || '重命名失败');
-      } catch (e) { setNavigationError(e.message || '重命名失败'); }
+      const currentTitle = sessions[id]?.title || sessions[id]?.displayTitle || '新会话';
       setRenameTarget(null);
+      if (!val || val === currentTitle) return;
+      setNavigationError('');
+      try {
+        // Prefer the manager-level rename; fall back to the bound session scope.
+        if (ctx.sessions.rename && typeof ctx.sessions.rename === 'function') {
+          const result = await ctx.sessions.rename(id, val);
+          if (result && !result.ok) setNavigationError(result.error?.message || '重命名失败');
+        } else {
+          const result = await ctx.sessions.binding(id)?.session?.rename(val);
+          if (result && !result.ok) throw new Error(result.error?.message || '重命名失败');
+        }
+      } catch (e) { setNavigationError(e.message || '重命名失败'); }
+    };
+    const setPinned = async (id, pin) => {
+      setTaskMenu(null); setNavigationError('');
+      try {
+        if (pin) await ctx.uiWorkspace.pinSession(id);
+        else await ctx.uiWorkspace.unpinSession(id);
+      } catch (e) { setNavigationError(e.message || (pin ? '置顶失败' : '取消置顶失败')); }
+    };
+    const setArchived = async (id, archive) => {
+      setTaskMenu(null); setNavigationError('');
+      if (archive && sessions[id]?.running && !window.confirm('该会话还有正在进行的任务。停止它并归档？')) return;
+      try {
+        if (archive) await ctx.uiWorkspace.archiveSession(id, sessions[id]?.running ? { stopActivity: true } : {});
+        else await ctx.uiWorkspace.unarchiveSession(id);
+      } catch (e) { setNavigationError(e.message || (archive ? '归档失败' : '恢复失败')); }
+    };
+    const purgeSession = async id => {
+      setTaskMenu(null); setNavigationError('');
+      try {
+        const result = await ctx.connection.rpc.call('/api', 'dsh-codex-ui/purge-session', { sessionId: id });
+        if (result && result.ok) addPurged(id);
+        else setNavigationError(result?.error?.message || '删除失败：未加载删除服务，请重启 DSH 后再试。');
+      } catch (e) { setNavigationError(e.message || '删除服务未加载：请重启 DSH 后再试。'); }
     };
     React.useEffect(() => {
       if (!taskMenu) return;
@@ -253,23 +295,30 @@ export function apply(ctx) {
       return () => document.removeEventListener('pointerdown', dismiss);
     }, [taskMenu]);
     const renderTask = id => {
-      const title = sessions[id].title || '新会话';
+      const entry = sessions[id];
+      if (!entry || purgedIds.has(id)) return null;
+      const title = entry.displayTitle || entry.title || '新会话';
       const isPinned = pins.includes(id);
+      const isArchived = archivedIds.includes(id);
       const isRenaming = renameTarget?.id === id;
+      const openable = !isArchived;
       const openSession = () => { setSelectedTask(id); ctx.uiWorkspace.openSession(id); };
-      return h('div', { key: id, className: 'cg-task-row' + ((currentSession?.id ?? selectedTask) === id ? ' cg-task-current' : ''), onMouseEnter: event => { if (!isRenaming) { const rect = event.currentTarget.getBoundingClientRect(); setTaskHover({ title, right: rect.right, top: rect.top }); } }, onMouseLeave: () => setTaskHover(null) },
+      return h('div', { key: id, className: 'cg-task-row' + ((currentSession?.id ?? selectedTask) === id ? ' cg-task-current' : '') + (isArchived ? ' cg-task-archived' : ''), onMouseEnter: event => { if (!isRenaming) { const rect = event.currentTarget.getBoundingClientRect(); setTaskHover({ title, right: rect.right, top: rect.top }); } }, onMouseLeave: () => setTaskHover(null) },
         isRenaming
           ? h('input', { className: 'cg-rename-input', autoFocus: true, value: renameTarget.value, 'aria-label': '重命名会话', onChange: e => setRenameTarget({ id, value: e.target.value }), onKeyDown: e => { if (e.key === 'Enter') { e.preventDefault(); commitRename(); } if (e.key === 'Escape') setRenameTarget(null); }, onBlur: commitRename })
           : h(Button, { label: title, className: 'cg-pinned-row', onClick: openSession, children: title }),
-        !isRenaming && h('div', { className: 'cg-task-actions' }, h(Button, { icon: 'more', label: title + ' 的操作', onClick: e => { e.stopPropagation(); setTaskMenu(taskMenu === id ? null : id); } })),
+        !isRenaming && !isArchived && h('div', { className: 'cg-task-actions' }, h(Button, { icon: 'more', label: title + ' 的操作', onClick: e => { e.stopPropagation(); setTaskMenu(taskMenu === id ? null : id); } })),
+        !isRenaming && isArchived && h('div', { className: 'cg-task-actions' }, h(Button, { icon: 'more', label: title + ' 的操作', onClick: e => { e.stopPropagation(); setTaskMenu(taskMenu === id ? null : id); } })),
         taskMenu === id && h('div', { className: 'cg-task-menu', role: 'menu' },
-          h(Button, { role: 'menuitem', children: '打开', label: '打开', onClick: () => { setTaskMenu(null); openSession(); } }),
-          h(Button, { role: 'menuitem', children: isPinned ? '取消置顶' : '置顶', label: isPinned ? '取消置顶' : '置顶', onClick: () => { setTaskMenu(null); savePins(isPinned ? pins.filter(p => p !== id) : [id, ...pins]); } }),
-          h(Button, { role: 'menuitem', children: '重命名', label: '重命名', onClick: () => { setTaskMenu(null); setRenameTarget({ id, value: title }); } }),
-          h(Button, { role: 'menuitem', children: '分叉会话', label: '分叉会话', onClick: () => { setTaskMenu(null); ctx.uiWorkspace.forkSession(id).catch(e => setNavigationError(e.message || '分叉失败')); } }),
-          h(Button, { role: 'menuitem', children: '归档会话', label: '归档会话', className: 'cg-menu-danger', onClick: () => { setTaskMenu(null); ctx.uiWorkspace.archiveSession(id).catch(e => setNavigationError(e.message || '归档失败')); } })));
+          openable && h(Button, { role: 'menuitem', children: '打开', label: '打开', onClick: () => { setTaskMenu(null); openSession(); } }),
+          openable && h(Button, { role: 'menuitem', icon: 'pin', children: isPinned ? '取消置顶' : '置顶', label: isPinned ? '取消置顶' : '置顶', onClick: () => setPinned(id, !isPinned) }),
+          openable && h(Button, { role: 'menuitem', icon: 'edit', children: '重命名', label: '重命名', onClick: () => { setTaskMenu(null); setRenameTarget({ id, value: title }); } }),
+          openable && h(Button, { role: 'menuitem', icon: 'fork', children: '分叉会话', label: '分叉会话', onClick: () => { setTaskMenu(null); ctx.uiWorkspace.forkSession(id).catch(e => setNavigationError(e.message || '分叉失败')); } }),
+          h(Button, { role: 'menuitem', icon: isArchived ? 'unarchive' : 'archive', children: isArchived ? '恢复会话' : '归档会话', label: isArchived ? '恢复会话' : '归档会话', onClick: () => setArchived(id, !isArchived) }),
+          isArchived && h(Button, { role: 'menuitem', icon: 'trash', children: '删除会话日志', label: '删除会话日志', className: 'cg-menu-danger', onClick: () => { if (window.confirm('永久删除该会话的日志记录？此操作不可撤销。')) purgeSession(id); } })));
     };
-    const recentIds = Object.keys(sessions).filter(id => !pins.includes(id)).sort((a, b) => { const stamp = item => { const value = item.updatedAt ?? item.createdAt; return typeof value === "number" ? value : Date.parse(value || "") || 0; }; return stamp(sessions[b]) - stamp(sessions[a]); });
+    const recentIds = Object.keys(sessions).filter(id => !pins.includes(id) && !archivedIds.includes(id) && !purgedIds.has(id)).sort((a, b) => { const stamp = item => { const value = item.updatedAt ?? item.createdAt; return typeof value === "number" ? value : Date.parse(value || "") || 0; }; return stamp(sessions[b]) - stamp(sessions[a]); });
+    const archivedVisible = archivedIds.filter(id => sessions[id] && !purgedIds.has(id));
     return h('div', { className: `cg-sidebar${collapsed ? ' cg-collapsed' : ''}` },
       h('nav', { className: 'cg-rail', 'aria-label': '应用导航' },
         rail('home', '主页', () => { setLocalSection('home'); go(null); if (collapsed) ctx.layout.toggleSidebar(); }),
@@ -299,12 +348,14 @@ export function apply(ctx) {
         modeError && h('div', { className: 'cg-notice', role: 'alert' }, modeError),
         h(Button, { icon: 'edit', label: '新聊天', className: 'cg-new', onClick: () => ctx.uiWorkspace.startSession(), children: '新聊天' }),
         h('div', { className: 'cg-browse' },
-          pins.some(id => sessions[id]) && h(Button, { label: '置顶', className: 'cg-section-toggle cg-pins-toggle', 'aria-expanded': pinsOpen, onClick: () => setPinsOpen(!pinsOpen), children: ['置顶', h('span', { key: 'arrow', className: 'cg-disclosure-arrow', 'aria-hidden': true }, h(Icon, { name: 'chevron', size: 13 }))] }),
-          ...(pinsOpen ? pins.filter(id => sessions[id]).map(renderTask) : []),
+          pins.some(id => sessions[id] && !purgedIds.has(id)) && h(Button, { label: '置顶', className: 'cg-section-toggle cg-pins-toggle', 'aria-expanded': pinsOpen, onClick: () => setPinsOpen(!pinsOpen), children: ['置顶', h('span', { key: 'arrow', className: 'cg-disclosure-arrow', 'aria-hidden': true }, h(Icon, { name: 'chevron', size: 13 }))] }),
+          ...(pinsOpen ? pins.filter(id => sessions[id] && !purgedIds.has(id)).map(renderTask) : []),
           h(Button, { label: '项目', className: 'cg-section-toggle', 'aria-expanded': projectsOpen, onClick: () => setProjectsOpen(!projectsOpen), children: ['项目', h('span', { key: 'arrow', className: 'cg-disclosure-arrow', 'aria-hidden': true }, h(Icon, { name: 'chevron', size: 13 }))] }),
           projectsOpen && h('div', { className: 'cg-projects' }, ...workspaces.items.map(project => { const title = !project.title || project.title === 'default-workspace' ? '默认工作区' : project.title; return h(Button, { key: project.workspaceId, icon: 'folder', label: title, onClick: () => ctx.uiWorkspace.openWorkspace(project.workspaceId).catch(error => setNavigationError(error.message || String(error))), children: title }); }), h(Button, { icon: 'plus', label: '添加项目', onClick: () => document.querySelector('.cg-workspaces [class*="headerActions"] button[class*="iconButton"]')?.click(), children: '添加项目' })),
           h(Button, { label: '最近', className: 'cg-section-toggle', 'aria-expanded': recentOpen, onClick: () => setRecentOpen(!recentOpen), children: ['最近', h('span', { key: 'arrow', className: 'cg-disclosure-arrow', 'aria-hidden': true }, h(Icon, { name: 'chevron', size: 13 }))] }),
-          ...(recentOpen ? recentIds.map(renderTask) : []),
+          ...(recentOpen ? recentIds.map(renderTask).filter(Boolean) : []),
+          archivedVisible.length > 0 && h(Button, { label: '已归档', className: 'cg-section-toggle', 'aria-expanded': archivedOpen, onClick: () => setArchivedOpen(!archivedOpen), children: ['已归档', h('span', { key: 'arrow', className: 'cg-disclosure-arrow', 'aria-hidden': true }, h(Icon, { name: 'chevron', size: 13 }))] }),
+          ...(archivedOpen ? archivedVisible.map(renderTask).filter(Boolean) : []),
           navigationError && h('div', { className: 'cg-notice', role: 'status' }, navigationError)),
         h('div', { className: 'cg-workspaces', hidden: true }, renderSlot('sidebar.workspaces', { wide: !collapsed, expandSidebar: () => ctx.layout.toggleSidebar() })),
         h('div', { className: 'cg-footer' }, renderSlot('sidebar.footer.action', { wide: !collapsed }))));

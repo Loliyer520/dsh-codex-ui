@@ -20,7 +20,9 @@ const paths = {
   trace: 'M9 5h12M9 12h12M9 19h12M3 3h3v4H3ZM3 10h3v4H3ZM3 17h3v4H3Z',
   target: 'M20 10a9 9 0 1 1-6-6M17 11a5 5 0 1 1-4-4M12 12l7-7M17 3v4h4',
   plus: 'M12 5v14M5 12h14',
-  at: 'M16 8v7a2 2 0 0 0 4 0v-3a8 8 0 1 0-3 6M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z'
+  at: 'M16 8v7a2 2 0 0 0 4 0v-3a8 8 0 1 0-3 6M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',
+  pin: 'M12 2a5 5 0 0 1 5 5c0 4-5 11-5 11S7 11 7 7a5 5 0 0 1 5-5Zm0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z',
+  fork: 'M7 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM7 7v4a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V7M12 13v6m-2 0h4'
 };
 function Icon({ name, size = 16, active = false }) {
   const attrs = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: name === 'more' ? 3.6 : 1.7, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true, 'data-icon': name };
@@ -224,18 +226,48 @@ export function apply(ctx) {
     }, [taskHover]);
     const [recentOpen, setRecentOpen] = React.useState(false);
     const [navigationError, setNavigationError] = React.useState('');
+    const [renameTarget, setRenameTarget] = React.useState(null);
     const workspaces = useWorkspaces(s => s);
-    const pins = workspaces.pinnedSessionIds || [];
+    const [pins, setPins] = React.useState(() => { try { return JSON.parse(localStorage.getItem('cg-pinned-sessions') || '[]'); } catch { return []; } });
+    const savePins = next => { try { localStorage.setItem('cg-pinned-sessions', JSON.stringify(next)); } catch {} setPins(next); };
     const searchSessions = () => { setRecentOpen(true); requestAnimationFrame(search); };
     const status = useSessionStatus(s => s);
     const waiting = Array.from(status.values()).filter(s => s.pendingInteraction || s.completionUnread).length;
     const settings = () => { setSettingsMenu(false); document.querySelector('.cg-native-settings button')?.click(); };
+    const commitRename = async () => {
+      if (!renameTarget) return;
+      const { id, value } = renameTarget;
+      const val = value.trim();
+      const currentTitle = sessions[id]?.title || '新会话';
+      if (!val || val === currentTitle) { setRenameTarget(null); return; }
+      try {
+        const result = await ctx.sessions.binding(id)?.session?.rename(val);
+        if (result && !result.ok) throw new Error(result.error?.message || '重命名失败');
+      } catch (e) { setNavigationError(e.message || '重命名失败'); }
+      setRenameTarget(null);
+    };
+    React.useEffect(() => {
+      if (!taskMenu) return;
+      const dismiss = e => { if (!e.target.closest?.('.cg-task-menu, .cg-task-actions')) setTaskMenu(null); };
+      document.addEventListener('pointerdown', dismiss);
+      return () => document.removeEventListener('pointerdown', dismiss);
+    }, [taskMenu]);
     const renderTask = id => {
       const title = sessions[id].title || '新会话';
-      return h('div', { key: id, className: 'cg-task-row' + ((currentSession?.id ?? selectedTask) === id ? ' cg-task-current' : ''), onMouseEnter: event => { const rect = event.currentTarget.getBoundingClientRect(); setTaskHover({ title, right: rect.right, top: rect.top }); }, onMouseLeave: () => setTaskHover(null) },
-        h(Button, { label: title, className: 'cg-pinned-row', onClick: () => { setSelectedTask(id); ctx.uiWorkspace.openSession(id); }, children: title }),
-        h('div', { className: 'cg-task-actions' }, h(Button, { icon: 'more', label: title + ' 的操作', onClick: () => setTaskMenu(taskMenu === id ? null : id) })),
-        taskMenu === id && h('div', { className: 'cg-task-menu' }, h(Button, { label: '打开任务', children: '打开任务', onClick: () => { setTaskMenu(null); setSelectedTask(id); ctx.uiWorkspace.openSession(id); } })));
+      const isPinned = pins.includes(id);
+      const isRenaming = renameTarget?.id === id;
+      const openSession = () => { setSelectedTask(id); ctx.uiWorkspace.openSession(id); };
+      return h('div', { key: id, className: 'cg-task-row' + ((currentSession?.id ?? selectedTask) === id ? ' cg-task-current' : ''), onMouseEnter: event => { if (!isRenaming) { const rect = event.currentTarget.getBoundingClientRect(); setTaskHover({ title, right: rect.right, top: rect.top }); } }, onMouseLeave: () => setTaskHover(null) },
+        isRenaming
+          ? h('input', { className: 'cg-rename-input', autoFocus: true, value: renameTarget.value, 'aria-label': '重命名会话', onChange: e => setRenameTarget({ id, value: e.target.value }), onKeyDown: e => { if (e.key === 'Enter') { e.preventDefault(); commitRename(); } if (e.key === 'Escape') setRenameTarget(null); }, onBlur: commitRename })
+          : h(Button, { label: title, className: 'cg-pinned-row', onClick: openSession, children: title }),
+        !isRenaming && h('div', { className: 'cg-task-actions' }, h(Button, { icon: 'more', label: title + ' 的操作', onClick: e => { e.stopPropagation(); setTaskMenu(taskMenu === id ? null : id); } })),
+        taskMenu === id && h('div', { className: 'cg-task-menu', role: 'menu' },
+          h(Button, { role: 'menuitem', children: '打开', label: '打开', onClick: () => { setTaskMenu(null); openSession(); } }),
+          h(Button, { role: 'menuitem', children: isPinned ? '取消置顶' : '置顶', label: isPinned ? '取消置顶' : '置顶', onClick: () => { setTaskMenu(null); savePins(isPinned ? pins.filter(p => p !== id) : [id, ...pins]); } }),
+          h(Button, { role: 'menuitem', children: '重命名', label: '重命名', onClick: () => { setTaskMenu(null); setRenameTarget({ id, value: title }); } }),
+          h(Button, { role: 'menuitem', children: '分叉会话', label: '分叉会话', onClick: () => { setTaskMenu(null); ctx.uiWorkspace.forkSession(id).catch(e => setNavigationError(e.message || '分叉失败')); } }),
+          h(Button, { role: 'menuitem', children: '归档会话', label: '归档会话', className: 'cg-menu-danger', onClick: () => { setTaskMenu(null); ctx.uiWorkspace.archiveSession(id).catch(e => setNavigationError(e.message || '归档失败')); } })));
     };
     const recentIds = Object.keys(sessions).filter(id => !pins.includes(id)).sort((a, b) => { const stamp = item => { const value = item.updatedAt ?? item.createdAt; return typeof value === "number" ? value : Date.parse(value || "") || 0; }; return stamp(sessions[b]) - stamp(sessions[a]); });
     return h('div', { className: `cg-sidebar${collapsed ? ' cg-collapsed' : ''}` },
